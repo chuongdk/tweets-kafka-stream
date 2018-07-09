@@ -204,9 +204,44 @@ object StreamTransform {
 
 
 
-  def user_count_stream(tweetsTransformed: KStreamS[String, String]) ={
+  def user_count_simple_stream(tweetsTransformed: KStreamS[String, String]) ={
     tweetsTransformed.groupByKey(serializedValueString).count("user_count").toStream
   }
+
+
+  def user_count_stream(tweetsTransformed: KStreamS[String, String]) ={
+
+    val user_stream: KStreamS[String, String] = tweetsTransformed.map{
+      (key, record)  =>
+        val tweetJson = ujson.read(record)
+        val userid = tweetJson("userID").toString().replace('"'.toString, "")
+
+        val newKey = s"tw.$userid.count"
+        val newValue = Js.Obj(
+          "key" -> newKey,
+          "value" -> 1
+        ).toString()
+        (key, newValue)
+    }
+
+
+    user_stream.groupByKey(serializedValueString).reduce{(v1, v2) =>
+      val count1 = ujson.read(v1)("value").toString().toInt
+      val count2 = ujson.read(v2)("value").toString().toInt
+      val key = ujson.read(v1)("key").toString().replace("\"", "").replace("\\", "")
+      val sum = count1 + count2
+
+      val newValue = Js.Obj(
+        "key" -> key,
+        "value" -> sum
+      ).toString()
+
+      newValue
+    }.toStream
+
+
+  }
+
 
   def hashtags_count_stream(tweetsTransformed: KStreamS[String, String]) ={
     hashtags_stream(tweetsTransformed).groupByKey(serializedValueLong).reduce{ (v1, v2) =>

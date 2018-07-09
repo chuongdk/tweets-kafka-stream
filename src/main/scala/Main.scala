@@ -27,14 +27,14 @@ object Main {
     val tweetsTransformed = tweet_transformed(tweetsInput)
 
     // Create output stream
-    val user_count: KStreamS[String, Long] = user_count_stream(tweetsTransformed)
+    val user_count: KStreamS[String, String] = user_count_stream(tweetsTransformed)
     val fav_count: KStreamS[String, String] = fav_count_stream(tweetsTransformed)
     val hashtags_count: KStreamS[String, Long] = hashtags_count_stream(tweetsTransformed)
     val mentions_count: KStreamS[String, Long] = mentions_count_stream(tweetsInput)
     val tweets_mario_fr: KStreamS[String, String] = mario_stream(tweetsInput)
 
     // Write (produce) the records out to mario topic
-    user_count.to("user_count")(producedValueLong)
+    user_count.to("user_count")(producedValueString)
     fav_count.to("fav_count")(producedValueString)
     hashtags_count.to("hashtags_count")(producedValueLong)
     mentions_count.to("user_mentions")(producedValueLong)
