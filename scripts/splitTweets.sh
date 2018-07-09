@@ -1,2 +1,5 @@
+mkdir data
 cd data
-split -l 100 --numeric-suffixes --additional-suffix .json /home/chuong/tabmoGit/homework-tweets/tweets.json stream_tweets
+echo "Split data to "
+echo $(pwd)
+split -l 100 --numeric-suffixes --additional-suffix .json ../tweets-v2.json stream_tweets

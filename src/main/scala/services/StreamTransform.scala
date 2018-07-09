@@ -201,8 +201,8 @@ object StreamTransform {
       (fav1 + fav2).toString
     }.toStream
   }
-ll
-  
+
+
 
   def user_count_stream(tweetsTransformed: KStreamS[String, String]) ={
     tweetsTransformed.groupByKey(serializedValueString).count("user_count").toStream
