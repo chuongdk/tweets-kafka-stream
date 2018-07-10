@@ -21,5 +21,26 @@ confluent start
 7. Using kafka stream to Transform tweets into streams
 sbt run
 
+
+TODO: 
 8. Using kafka connect to load these transformed streams to persitent storage/database (elastic search, s3, mongdb, ..)
-TODO
+
+9. Avro format with Schema registry
+
+
+
+
+
+
+
+
+IDEA:
+EX 1:
+	- 1 STREAM (tweets-transform-stream) for resume of tweets (USER ID, USER NAME, #FAV, #HASHTAGS) 
+		=> 1 TABLE for changelog of user (USER ID, USER NAME, #FAV, #HASHTAGS) 
+	- 1 STREAM (user-mentions-stream) for user mentions 
+		=> 1 TABLE for changlog of user mentions
+	- 1 TABLE for look up USER ID => USER NAME, #FAV, #HASHTAGS, #MENTIONS
+
+EX 2:
+	- 1 STREAM (mario-stream)  for resume of mario tweets 

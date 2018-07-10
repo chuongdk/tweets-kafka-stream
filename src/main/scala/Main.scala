@@ -1,6 +1,7 @@
 import java.util.Properties
+
 import com.lightbend.kafka.scala.streams.DefaultSerdes._
-import com.lightbend.kafka.scala.streams.KStreamS
+import com.lightbend.kafka.scala.streams.{KStreamS, KTableS}
 import config.KafkaStreamProperties
 import org.apache.kafka.common.serialization._
 import org.apache.kafka.streams.kstream.{Printed, Produced}
@@ -13,7 +14,6 @@ import services.StreamTransform._
 object Main {
   val streamsConfiguration: Properties = KafkaStreamProperties.getProperties
   val producedValueString = Produced.`with`(Serdes.String, Serdes.String)
-  val producedValueLong = Produced.`with`(stringSerde, longSerde)
 
 
   def main(args: Array[String]): Unit = {
@@ -23,29 +23,32 @@ object Main {
 
     // Read (consume) records from tweetsInput topic with keys and values being Strings
     val tweetsInput: KStreamS[String, String] = new KStreamS( builder.stream("tweets") )
-    // we transform to: userid, #fav, #hashtags, mentions, name
+    // we transform to: userid, #fav, #hashtags, name
     val tweetsTransformed = tweet_transformed(tweetsInput)
+    tweetsTransformed.to("tweets-transformed")(producedValueString)
 
-    // Create output stream
-    val user_count: KStreamS[String, String] = user_count_stream(tweetsTransformed)
-    val fav_count: KStreamS[String, String] = fav_count_stream(tweetsTransformed)
-    val hashtags_count: KStreamS[String, Long] = hashtags_count_stream(tweetsTransformed)
-    val mentions_count: KStreamS[String, Long] = mentions_count_stream(tweetsInput)
+    // Create user table (id, name, fav, hashtags) that update changelogs
+    val user_table:  KTableS[String, String]   = create_user_table(tweetsTransformed)
+
+    // mention table
+    val mentions_table: KTableS[String, String]  = create_mentions_table(tweetsInput)
+
+    // join 2 table
+    val reconciliation_table = create_reconciliation_table(user_table, mentions_table)
+
+    val reco_stream = reconciliation_table.toStream
+
+    reco_stream.to("tweets-reconciliation")(producedValueString)
+
     val tweets_mario_fr: KStreamS[String, String] = mario_stream(tweetsInput)
 
-    // Write (produce) the records out to mario topic
-    user_count.to("user_count")(producedValueString)
-    fav_count.to("fav_count")(producedValueString)
-    hashtags_count.to("hashtags_count")(producedValueLong)
-    mentions_count.to("user_mentions")(producedValueLong)
-    tweets_mario_fr.to("tweets_mario_fr")(producedValueString)
+    tweets_mario_fr.to("tweets-mario-fr")(producedValueString)
 
     // Print out records to stdout for debugging purposes
     val sysout = Printed
-      .toSysOut[String, Long]
+      .toSysOut[String, String]
       .withLabel("stdout")
-    mentions_count.print(sysout)
-
+    reco_stream.print(sysout)
 
     // Build Topology
     val topology: Topology = builder.build

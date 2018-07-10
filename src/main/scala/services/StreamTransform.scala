@@ -3,7 +3,7 @@ package services
 import java.text.SimpleDateFormat
 
 import com.lightbend.kafka.scala.streams.DefaultSerdes.{longSerde, stringSerde}
-import com.lightbend.kafka.scala.streams.KStreamS
+import com.lightbend.kafka.scala.streams.{KStreamS, KTableS}
 import org.apache.kafka.streams.kstream.Serialized
 import ujson.Js
 import ujson.Js.Value
@@ -24,105 +24,71 @@ object StreamTransform {
         val userJson = ujson.read(tweetJson("user"))
         val entitiesJson = ujson.read(tweetJson("entities"))
 
-        // output values
-        val userID = userJson("id_str").toString()
-        val name = userJson("name").toString()
-        val fav = tweetJson("favorite_count").toString()
-        val hashtags = entitiesJson("hashtags").arr.size.toString
-
-        // user_mentions = array of json => map to array of id
-        //user_mentions = [{"screen_name":"funkemcfly","name":"funké3","id":554060069,"id_str":"554060069","indices":[3,14]}]
-        //val user_mentions = entitiesJson("user_mentions").arr
-
         val jsonTransformed = Js.Obj(
-          "userID" -> userID.replace('"'.toString, ""),
-          "name" -> name.replace('"'.toString, ""),
-          "fav" -> fav.replace('"'.toString, ""),
-          "hashtags" -> hashtags.replace('"'.toString, "")
-          //"user_mentions" -> user_mentions
+          "userID" -> userJson("id_str"),
+          "count" -> 1,
+          "fav" -> tweetJson("favorite_count"),
+          "hashtags" -> entitiesJson("hashtags").arr.size,
+          "name" -> userJson("name")
         )
-        (userID.toString, jsonTransformed.toString())
+        (userJson("id_str").str, jsonTransformed.toString())
     }
   }
-
-
-  // fav stream: key, value = userID, #fav
-  def userid_stream(tweet_transformed: KStreamS[String, String]): KStreamS[String, String] = {
-    tweet_transformed.map{
-      (key, record)  =>
-        val tweetJson = ujson.read(record)
-        val userID = tweetJson("userID")
-        val newkey = "tw." + userID.toString() + ".count"
-        (newkey, "1")
-    }
-  }
-
-
-
-
-  // fav stream: key, value = userID, #fav
-  def fav_stream(tweet_transformed: KStreamS[String, String]): KStreamS[String, String] = {
-    tweet_transformed.map{
-      (key, record)  =>
-        val tweetJson = ujson.read(record)
-        val fav =
-          tweetJson("fav")
-        (key, fav.toString().replace('"'.toString, ""))
-    }
-  }
-
-
-
-  // fav stream: key, value = userID, #hashtags
-  def hashtags_stream(tweet_transformed: KStreamS[String, String]): KStreamS[String, Long] = {
-    tweet_transformed.map{
-      (key, record)  =>
-        val tweetJson = ujson.read(record)
-        val hashtags = try {
-          tweetJson("hashtags").toString().replace('"'.toString, "").toLong
-        }
-        catch {
-          case _: Throwable => 0L
-        }
-
-        (key, hashtags )
-    }
-  }
-
 
   // create a stream of user mentioned with key = userID, value = user Name
-  def user_mention_stream(tweetsInput: KStreamS[String, String]): KStreamS[String, Long] = {
+  // 1 tweet => 0 or 1 or more message of user mentions. That's why we need flatMap instead of map
+  def user_mention_stream(tweetsInput: KStreamS[String, String]): KStreamS[String, String] = {
     tweetsInput.flatMap{ (key, record) =>
       val tweetJson = ujson.read(record)
       val entitiesJson = ujson.read(tweetJson("entities"))
       val user_mentions = entitiesJson("user_mentions").arr
 
       // list of output (key, value)
-      val listOutput: mutable.Seq[(String, Long)] = user_mentions.map{ user_mention =>
+      val listOutput: mutable.Seq[(String, String)] = user_mentions.map{ user_mention =>
         val json_user_mention = ujson.read(user_mention)
-        val user_id = json_user_mention("id_str").toString().replace('"'.toString, "")
-        val user_name = json_user_mention("name").toString().replace('"'.toString, "")
-        (user_id, 1L)
+        val user_id = json_user_mention("id_str").str
+        val jsonValue: String = Js.Obj(
+          "userID" -> json_user_mention("id_str"),
+          "mentioned" -> 1
+        ).toString()
+        (user_id, jsonValue)
       }
-
       listOutput
     }
   }
 
+
+  // A table to keep counting userID -> mentions
+  def create_mentions_table(tweetsInput: KStreamS[String, String]): KTableS[String, String] ={
+    user_mention_stream(tweetsInput).groupByKey(serializedValueString).reduce{ (v1, v2) =>
+      val v1Json = ujson.read(v1)
+      val v2Json = ujson.read(v2)
+
+      val mentionCount = v1Json("mentioned").num + v2Json("mentioned").num
+
+      val jsonTransformed = Js.Obj(
+        "userID" -> v1Json("userID"),
+        "mentioned" -> mentionCount.toInt
+      )
+      jsonTransformed.toString()
+    }
+  }
+
+
+
   def tweet_to_mario(tweetJson: Value ) = {
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
-
 
     val entitiesJson = ujson.read(tweetJson("entities"))
     val userJson = ujson.read(tweetJson("user"))
 
     // output values
-    val tweetID = tweetJson("id_str").toString()
-    val userID = userJson("id_str").toString()
-    val userName = userJson("name").toString()
-    val created_at: Long = tweetJson("timestamp_ms").toString.replace('"'.toString, "").toLong
+    val tweetID = tweetJson("id_str").str
+    val userID = userJson("id_str").str
+    val userName = userJson("name").str
+    val created_at: Long = tweetJson("timestamp_ms").str.toLong
     val date: String = dateFormat.format(created_at)
-    val text = tweetJson("text").toString()
+    val text = tweetJson("text").str
 
     val medias: String =
       try {
@@ -130,8 +96,8 @@ object StreamTransform {
         val mediaMap = medias.map {
           media =>
             val jsonMedia = ujson.read (media)
-            val idMedia = jsonMedia ("id_str").toString ()
-            val media_url = jsonMedia ("media_url").toString ()
+            val idMedia = jsonMedia ("id_str").str
+            val media_url = jsonMedia ("media_url").str
             (idMedia, media_url)
         }.mkString(",")
 
@@ -145,20 +111,20 @@ object StreamTransform {
 
     val listHashtags: String = hashtags.map{ hashtag =>
       val jsonHashtag = ujson.read(hashtag)
-      val textHashtag = jsonHashtag("text")
+      val textHashtag = jsonHashtag("text").str
       textHashtag
     }.mkString(",")
 
 
     // ujson string value always have "<string>"
     val jsonMario = Js.Obj(
-      "id" -> tweetID.replace('"'.toString, ""),
-      "user_id" -> userID.replace('"'.toString, ""),
-      "screen_name" -> userName.replace('"'.toString, ""),
+      "id" -> tweetID,
+      "user_id" -> userID,
+      "screen_name" -> userName,
       "created_at" -> date,
-      "text" ->  text.replace('"'.toString, ""),
-      "medias" -> medias.replace('"'.toString, ""),
-      "hashtags" -> listHashtags.replace('"'.toString, "")
+      "text" ->  text,
+      "medias" -> medias,
+      "hashtags" -> listHashtags
     )
     jsonMario.toString()
   }
@@ -168,8 +134,8 @@ object StreamTransform {
   def mario_stream(tweetsInput: KStreamS[String, String]) = {
     tweetsInput.flatMapValues{ record: String =>
       val tweetJson: Value = ujson.read(record)
-      val lang: String = tweetJson("lang").toString().replace('"'.toString, "")
-      val text: String = tweetJson("text").toString()
+      val lang: String = tweetJson("lang").str
+      val text: String = tweetJson("text").str
 
       // WHERE condition
       val output: Seq[String] =
@@ -178,80 +144,58 @@ object StreamTransform {
         }
         else
           Nil
-
       output
     }
   }
 
 
-  def fav_count_stream(tweetsTransformed: KStreamS[String, String]) ={
-    fav_stream(tweetsTransformed).groupByKey(serializedValueString).reduce{(v1, v2) =>
-      val fav1 = try {
-        v1.toLong
-      }
-      catch {
-        case _: Throwable => 0L
-      }
-      val fav2 = try {
-        v2.toLong
-      }
-      catch {
-        case _: Throwable => 0L
-      }
-      (fav1 + fav2).toString
-    }.toStream
-  }
+  // One stream that aggregate: count + fav + hashtags.
+  // IDEA: transform tweets => group by stream => aggregate table => changelog stream
+  def create_user_table(tweetsTransformed: KStreamS[String, String]) ={
 
+    tweetsTransformed.groupByKey(serializedValueString).reduce{ (v1, v2 ) =>
+      val v1Json = ujson.read(v1)
+      val v2Json = ujson.read(v2)
 
-
-  def user_count_simple_stream(tweetsTransformed: KStreamS[String, String]) ={
-    tweetsTransformed.groupByKey(serializedValueString).count("user_count").toStream
-  }
-
-
-  def user_count_stream(tweetsTransformed: KStreamS[String, String]) ={
-
-    val user_stream: KStreamS[String, String] = tweetsTransformed.map{
-      (key, record)  =>
-        val tweetJson = ujson.read(record)
-        val userid = tweetJson("userID").toString().replace('"'.toString, "")
-
-        val newKey = s"tw.$userid.count"
-        val newValue = Js.Obj(
-          "key" -> newKey,
-          "value" -> 1
-        ).toString()
-        (key, newValue)
+      val jsonTransformed = Js.Obj(
+        "userID" -> v1Json("userID"),
+        "count" -> (v1Json("count").num + v2Json("count").num).toInt,
+        "fav" -> (v1Json("fav").num + v2Json("fav").num).toInt,
+        "hashtags" -> (v1Json("hashtags").num + v2Json("hashtags").num).toInt,
+        "name" -> v1Json("name")
+      )
+      jsonTransformed.toString()
     }
+  }
 
+  // we join user_table with mention_table
+  def create_reconciliation_table(user_table: KTableS[String, String], mention_table: KTableS[String, String]) ={
+      user_table.leftJoin(mention_table,
+        joiner = { (v1: String, v2: String) =>
+          val v1Json = ujson.read(v1)
 
-    user_stream.groupByKey(serializedValueString).reduce{(v1, v2) =>
-      val count1 = ujson.read(v1)("value").toString().toInt
-      val count2 = ujson.read(v2)("value").toString().toInt
-      val key = ujson.read(v1)("key").toString().replace("\"", "").replace("\\", "")
-      val sum = count1 + count2
+          val mention: Int = if (v2 != null)
+            ujson.read(v2)("mentioned").num.toInt
+          else
+            0
 
-      val newValue = Js.Obj(
-        "key" -> key,
-        "value" -> sum
-      ).toString()
+          val jsonJoin = Js.Obj(
+            "userID" -> v1Json("userID"),
+            "count" -> v1Json("count"),
+            "fav" -> v1Json("fav"),
+            "hashtags" -> v1Json("hashtags"),
+            "name" -> v1Json("name"),
+            "mentioned" -> mention
+          )
+          jsonJoin.toString()
 
-      newValue
-    }.toStream
-
-
+        }
+    )
   }
 
 
-  def hashtags_count_stream(tweetsTransformed: KStreamS[String, String]) ={
-    hashtags_stream(tweetsTransformed).groupByKey(serializedValueLong).reduce{ (v1, v2) =>
-      v1 + v2
-    }.toStream
-  }
 
-  def mentions_count_stream(tweetsInput: KStreamS[String, String]) ={
-    user_mention_stream(tweetsInput).groupByKey(serializedValueLong).reduce{ (v1, v2) =>
-      v1 + v2
-    }.toStream
-  }
+
+
+
 }
