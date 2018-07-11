@@ -44,13 +44,48 @@ sbt run
 $kafka-avro-console-consumer  --bootstrap-server localhost:9092 --topic tweets-avro-user
 ```
 
-9. Sink Avro topic to s3 with Kafka Connect
+or if you want to see key / value:
+```
+kafka-avro-console-consumer  --bootstrap-server localhost:9092 --topic tweets-avro-user --key-deserializer org.apache.kafka.common.serialization.StringDeserializer --property  print.key=true
+```
+
+9. Sink Avro topic to s3 with Kafka Connect   (note: you need to modify plugin.path in worker.properties)
 ```
 $connect-standalone kafka-connect-config/worker.properties kafka-connect-config/s3.properties 
 ```
 
-## TODO: 
-10. Using kafka connect to load these transformed streams to persitent storage/database (elastic search, s3, mongdb, ..)
+
+10. Using kafka connect to sink avro topic elasticsearch
+
+* install elastic search 6.3 (https://www.elastic.co/guide/en/elasticsearch/reference/current/getting-started.html)
+* start elastic search: `$elasticsearch`
+* Sink avro topic to elastic search 
+```
+connect-standalone kafka-connect-config/worker.propertiesties kafka-connect-config/elasticsearch.properties 
+```
+* Verify index of elastic search
+```
+curl -XGET 'http://localhost:9200/tweets-avro-user/_search?pretty'
+```
+
+So, we have key/value of elastic search is exactly key/value of kafka topic
+
+```
+      {
+        "_index" : "tweets-avro-user",
+        "_type" : "kafka-connect",
+        "_id" : "3105737085",
+        "_score" : 1.0,
+        "_source" : {
+          "userID" : "3105737085",
+          "count" : 26,
+          "fav" : 1560,
+          "hashtags" : 52,
+          "name" : "\uD835\uDCC1\uD835\uDC5C\uD835\uDCCB\uD835\uDC52\uD835\uDFE6\uD835\uDC52\uD835\uDCCB\uD835\uDCB6 ♡",
+          "mentioned" : 0
+        }
+```
+
 
 
 
