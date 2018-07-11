@@ -52,7 +52,6 @@ object KafkaStream {
 
     tweets_mario_fr.to("tweets-mario-fr")(producedValueString)
 
-
     val (avroStream, producedValueAvro) = create_avro_user_stream(reco_stream)
     avroStream.to("tweets-avro-user")(producedValueAvro)
 
