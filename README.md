@@ -1,7 +1,7 @@
 # An example of using kafka-stream and kafka-connect to ETL a stream of tweets in real time
 
 ## Objective
-From a tweets topic, we generate 2 kafka topic 
+From a tweets topic, we generate 3 kafka topic 
 
 * topic `tweets-reconciliation`: It is a changelog topic that sumerizes count, fav, hashtags, name, mentioned of userID. Key = userID, value = json info. For example:
 
@@ -12,7 +12,7 @@ From a tweets topic, we generate 2 kafka topic
 [stdout]: 320703608, {"userID":"320703608","count":1,"fav":72,"hashtags":5,"name":"bun witch\ud83c\udf38\ud83c\udf80\ud83d\udc30","mentioned":39}
 ```
 
-Then we can use kafka connect to export the topic to S3, mongoDB, elasticsearch,...
+* topic `tweets-avro-user`: it contains the same messages of `tweets-reconciliation`, but in avro format. The schema is updated with Schema Registry.
 
 * topic `tweets_mario_fr`
 
@@ -55,7 +55,7 @@ $connect-standalone kafka-connect-config/worker.properties kafka-connect-config/
 ```
 
 
-10. Using kafka connect to sink avro topic elasticsearch
+10. Using kafka connect to sink avro topic to elasticsearch
 
 * install elastic search 6.3 (https://www.elastic.co/guide/en/elasticsearch/reference/current/getting-started.html)
 * start elastic search: `$elasticsearch`
