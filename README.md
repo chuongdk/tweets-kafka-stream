@@ -40,14 +40,18 @@ confluent start
 sbt run
 
 8. Show avro topic
-kafka-avro-console-consumer  --bootstrap-server localhost:9092 --topic tweets-avro-user
+```
+$kafka-avro-console-consumer  --bootstrap-server localhost:9092 --topic tweets-avro-user
+```
 
-
+9. Sink Avro topic to s3 with Kafka Connect
+```
+$connect-standalone kafka-connect-config/worker.properties kafka-connect-config/s3.properties 
+```
 
 ## TODO: 
-8. Using kafka connect to load these transformed streams to persitent storage/database (elastic search, s3, mongdb, ..)
+10. Using kafka connect to load these transformed streams to persitent storage/database (elastic search, s3, mongdb, ..)
 
-9. Avro format with Schema registry
 
 
 
