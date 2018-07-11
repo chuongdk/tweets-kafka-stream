@@ -59,16 +59,16 @@ $connect-standalone kafka-connect-config/worker.properties kafka-connect-config/
 
 * install elastic search 6.3 (https://www.elastic.co/guide/en/elasticsearch/reference/current/getting-started.html)
 * start elastic search: `$elasticsearch`
-* Sink avro topic to elastic search 
+* Sink avro topic to elasticsearch 
 ```
 connect-standalone kafka-connect-config/worker.propertiesties kafka-connect-config/elasticsearch.properties 
 ```
-* Verify index of elastic search
+* Verify index of elasticsearch
 ```
 curl -XGET 'http://localhost:9200/tweets-avro-user/_search?pretty'
 ```
 
-So, we have key/value of elastic search is exactly key/value of kafka topic
+So, we have key/value of elasticsearch is exactly key/value of kafka topic
 
 ```
       {
