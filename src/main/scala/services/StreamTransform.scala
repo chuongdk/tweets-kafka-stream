@@ -1,10 +1,18 @@
 package services
 
+import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Collections
 
 import com.lightbend.kafka.scala.streams.DefaultSerdes.{longSerde, stringSerde}
 import com.lightbend.kafka.scala.streams.{KStreamS, KTableS}
-import org.apache.kafka.streams.kstream.Serialized
+import io.confluent.kafka.schemaregistry.client.{CachedSchemaRegistryClient, SchemaRegistryClient}
+import io.confluent.kafka.serializers.AbstractKafkaAvroSerDeConfig
+import io.confluent.kafka.streams.serdes.avro.GenericAvroSerde
+import org.apache.avro.Schema
+import org.apache.avro.generic.{GenericData, GenericRecord}
+import org.apache.kafka.common.serialization.Serdes
+import org.apache.kafka.streams.kstream.{Produced, Serialized}
 import ujson.Js
 import ujson.Js.Value
 
@@ -13,8 +21,6 @@ import scala.collection.mutable
 object StreamTransform {
 
   val serializedValueString = Serialized.`with`(stringSerde, stringSerde)
-
-  val serializedValueLong = Serialized.`with`(stringSerde, longSerde)
 
   // create new stream that transform tweets 1:1
   def tweet_transformed(tweetsInput: KStreamS[String, String]): KStreamS[String, String] = {
@@ -76,6 +82,8 @@ object StreamTransform {
 
 
 
+
+  //  transform tweets to mario format
   def tweet_to_mario(tweetJson: Value ) = {
     val dateFormat = new SimpleDateFormat("yyyy-MM-dd")
 
@@ -188,12 +196,51 @@ object StreamTransform {
             "mentioned" -> mention
           )
           jsonJoin.toString()
-
         }
     )
   }
 
+  // add user_schema to schema registry
+  def add_user_schema() = {
+    val schema: Schema = new Schema.Parser().parse(new File("schemas/user.avsc"))
+    println("User schema for AVRO encoding: \n" + schema.toString(true))
 
+    val schemaClient : SchemaRegistryClient = new CachedSchemaRegistryClient("http://localhost:8081", 1000)
+    schemaClient.register("tweets-user-value", schema)
+
+  }
+
+
+  // create an stream that serialize/deserialize avro
+  def create_avro_user_stream(user_stream: KStreamS[String, String]): (KStreamS[String, GenericRecord], Produced[String, GenericRecord]) = {
+    add_user_schema()
+
+    val schema: Schema = new Schema.Parser().parse(new File("schemas/user.avsc"))
+    val avroStream: KStreamS[String, GenericRecord] = user_stream.mapValues { record =>
+      val userJson = ujson.read(record)
+      val output_record: GenericRecord = {
+        val r = new GenericData.Record(schema)
+        r.put("userID", userJson("userID").str)
+        r.put("count", userJson("count").num.toInt)
+        r.put("fav", userJson("fav").num.toInt)
+        r.put("hashtags", userJson("hashtags").num.toInt)
+        r.put("name", userJson("name").str)
+        r.put("mentioned", userJson("mentioned").num.toInt)
+        r
+      }
+      output_record
+    }
+
+    val genericAvroSerde = {
+      val gas = new GenericAvroSerde
+      val isKeySerde: Boolean = false
+      gas.configure(Collections.singletonMap(AbstractKafkaAvroSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://localhost:8081"), isKeySerde)
+      gas
+    }
+    val producedValueAvro = Produced.`with`(stringSerde, genericAvroSerde)
+    (avroStream, producedValueAvro)
+
+  }
 
 
 

@@ -18,7 +18,6 @@ object KafkaStreamProperties {
   p.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
   // Use a temporary directory for storing state, which will be automatically removed after the test.
 
-  p
 
   def getProperties = {
     p

@@ -39,6 +39,10 @@ confluent start
 7. Using kafka stream to Transform tweets into streams
 sbt run
 
+8. Show avro topic
+kafka-avro-console-consumer  --bootstrap-server localhost:9092 --topic tweets-avro-user
+
+
 
 ## TODO: 
 8. Using kafka connect to load these transformed streams to persitent storage/database (elastic search, s3, mongdb, ..)
