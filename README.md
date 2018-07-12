@@ -68,7 +68,7 @@ connect-standalone kafka-connect-config/worker.propertiesties kafka-connect-conf
 curl -XGET 'http://localhost:9200/tweets-avro-user/_search?pretty'
 ```
 
-So, we have key/value of elasticsearch is exactly key/value of kafka topic
+* So, we have key/value of elasticsearch is exactly key/value of kafka topic
 
 ```
       {
@@ -85,6 +85,9 @@ So, we have key/value of elasticsearch is exactly key/value of kafka topic
           "mentioned" : 0
         }
 ```
+
+* Get info of userID = 110131353
+ curl -XGET 'http://localhost:9200/tweets-avro-user/kafka-connect/110131353'
 
 
 
